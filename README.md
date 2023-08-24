@@ -4,55 +4,45 @@ This document summarizes the high-level coding conventions for writing Unreal cl
 
 The goal is to make it easier to work in similar teams inside and outside the company, as well as have client code blend in with other code of the Unreal API. We are providing a complete summary here in order to allow people to understand the conventions at a glance, instead of having to open multiple documents. Our coding conventions are numbered, which makes it easier to refer to them in code reviews.
 
+## 1. Names
 
-## 1. Namespaces
-
-1.1. __DO NOT__ use namespaces to organize your game classes. Namespaces are not supported by UnrealHeaderTool, so they can't be used when defining `UCLASS`es, `USTRUCT`s etc., and we don't want to put half of our game code in a namespace and the other half in global scope.
-
-1.2. __DO__ add a prefix to all class and struct names, based on your project name.
+1.1. __DO__ add a prefix to all class and struct names, based on your project name.
 
 
 ## 2. Files
 
-2.1. __DO__ use PascalCase for file names, with the project name prefix, but without the type prefix (e.g. `AHOATCharacter` goes into `HOATCharacter.h`).
+2.1. __DO__ use PascalCase for file names, with the project name prefix, but without the type prefix (e.g. `AHOATCharacter` goes into `HOATCharacter.h`) __IF__ files contain declaration or definition of classes with corresponding name.
 
-2.2. __DO__ write header files with the following structure:
-
-* `#pragma once`
-* `#include` of the pre-compiled header, if any (e.g. `#include "HOATPCH.h"`)
-* `#include` of the base class header, if any (e.g. `#include "GameFramework/Character.h"`)
-* `#include` of the generated class header (e.g. `#include "HOATCharacter.generated.h"`)
-* delegate declarations
-* forward declarations for any referenced engine or game types
-* type definition
-
-2.3. __DO__ define classes with the following structure:
+2.2. __DO__ define classes with the following structure:
 
 * public constants
-* public static methods
 * constructors
 * destructor
+* public `UFUNCTION`s
 * public methods (try to keep virtual methods, event handlers and regular functions groups together in their own section)
 * operators
 * public `UPROPERTY`s
 * public fields
 * protected constants
+* protected `UFUNCTION`s
 * protected methods (same consideration as public ones: try to separate virtual from non-virtual ones)
+* protected `UPROPERTY`s
 * protected fields
 * private constants
-* private functions
+* private `UFUNCTION`s
+* private methods
+* private `UPROPERTY`s
 * private fields
 
 Within each of these groups, order members by logical groups when appropriate.
 
-2.4. __DO NOT__ cover more than a single feature in each file. Don't define more than one public type per file
-
 ## 3. Includes
 
-3.1. __DO NOT__ include unused headers. This will generally help reduce the compilation time, especially for developers when just one header has been modified. It may also avoid errors that can be caused by conflicts between headers. If an object in the class is only used by pointer or by reference, avoid `include`ing it and just add a forward declaration before the class. 
+3.1. __DO_NOT__ add additional dependencies if such can be avoided with forward declarations. If some dependencies in a header file can be avoided by moving some logic to the corresponding .cpp file, it must be done.
 
-3.2. __DO NOT__ rely on a header that is included indirectly by another header you include.
+3.2. __DO__ prefer using inline forawrd declaration over forward declaration list at the top of the file. It's hard to keep all the list entries relevant. It tends to grow but never shrinks and acquires "dead" forward declarations. The foraward declaration list is still acceptable if the header contains plenty of declared name usages (at least 3 or more). Enums forward declarations are exceptions as they require underlying type specification in forward declarations.
 
+3.3. __DO NOT__ include Unreal Engine's header files. All Unreal Engine's header files must be included in the precompiled header.
 
 ## 4. Classes & Structs
 
@@ -72,55 +62,23 @@ Within each of these groups, order members by logical groups when appropriate.
 
 4.4. __DO__ uppercase the first letter of acronyms, only, e.g. `FHOATXmlStreamReader`, not `FHOATXMLStreamReader`.
 
-4.5. __DO__ add a virtual destructor to classes with virtual member functions.
-
-4.6. __DO__ mark classes that are not meant to be derived from as `final`. This should be the default for non-interface classes. Care has to be taken when removing the `final` keyword from a class when inheritance is required. Classes that are already derived don't need to be marked as `final` by default: In the most common case there is no reason to prevent further inheritance.
-
-4.7. __DO__ use a non-virtual destructor in `final` classes unless they are already derived.
-
-4.8. __DO__ use `struct`s for data containers, only. They shouldn't contain any logic beyond simple validation or need any destructors.
+4.5. __DO__ use `struct`s for data containers, only. They shouldn't contain any logic beyond simple validation or need any destructors.
 
 ## 5. Constructors
 
-5.1. __DO__ mark each constructor that takes exactly one argument as `explicit`, unless it's a copy constructor or the whole point of the constructor is to allow implicit casting. This minimizes wrong use of the constructor.
-
-5.2 __DO NOT__ define empty constructors/destructors that do nothing (with an empty body or with `= default`) unless required.
-
-5.3 __CONSIDER__ defining a deleted copy constructor/copy assignment operator for classes and structs that should not be copied (e.g. ones that contain a lot of data).
+5.1 __CONSIDER__ defining a deleted copy constructor/copy assignment operator for classes and structs that should not be copied (e.g. ones that contain a lot of data).
 
 ## 6. Functions
 
 6.1. __DO__ use PascalCase for functions names.
 
-6.2. __DO NOT__ add a space between function name and parameter list:
+6.2. __DO__ prefix function parameter names with `Out` if they are passed by reference and the function is expected to write to that value. This makes it obvious that the value passed in this argument will be replaced by the function. If an `Out` parameter is also a boolean, put the `b` before the `Out` prefix, e.g. `bOutResult`.
 
-      // Right:
-      void Tick(float DeltaSeconds);
+6.3. __CONSIDER__ writing functions with six parameters or less. For passing more arguments, pass instead a `struct` containing all the parameters (which sensible defaulted values), and/or refactor your function.
 
-      // Wrong:
-      void Tick (float DeltaSeconds);
+6.4. __AVOID__ providing function implementations in header files. Use inline functions judiciously, as they force rebuilds even in files which don't use them. Inlining should only be used for trivial accessors and when profiling shows there is a benefit to doing so. All code and local variables will be expanded out into the calling function and will cause the same build time problems caused by large functions.
 
-6.3. __DO__ pass each object parameter that is not a basic type (`int`, `float`, `bool`, `enum`, or pointers) by reference-to-const. This is faster, because it is not required to do a copy of the object. Also, this is required for exposing the property in blueprints:
-
-      bool GetObjectsAtWorldPosition(const FVector& WorldPositionXY, TArray<FHitResult>& OutHitResults);
-
-6.4. __DO__ prefix function parameter names with `Out` if they are passed by reference and the function is expected to write to that value. This makes it obvious that the value passed in this argument will be replaced by the function. If an `Out` parameter is also a boolean, put the `b` before the `Out` prefix, e.g. `bOutResult`. 
-
-6.5. __DO__  flag methods as `const` if they do not modify the object.
-
-6.6. __CONSIDER__ writing functions with six parameters or less. For passing more arguments, pass instead a `struct` containing all the parameters (which sensible defaulted values), and/or refactor your function.
-
-6.7. __CONSIDER__ using enum values instead of boolean function parameters.
-
-      // Right:
-      ShowMessageBox(TEXT("Nice Title"), TEXT("Nice Text"), MessageBox::MESSAGEBOX_BUTTONS_OK);
-
-      // Wrong: Meaning of third parameter is not immediately obvious.
-      ShowMessageBox(TEXT("Nice Title"), TEXT("Nice Text"), false);
-
-6.8. __AVOID__ providing function implementations in header files. Use inline functions judiciously, as they force rebuilds even in files which don't use them. Inlining should only be used for trivial accessors and when profiling shows there is a benefit to doing so. Be even more conservative in the use of FORCEINLINE. All code and local variables will be expanded out into the calling function and will cause the same build time problems caused by large functions. Don't use inlining or templates for functions which are likely to change over a hot reload.
-
-6.9. __AVOID__ using BlueprintPure for functions that do non-trivial amount of work. Keep in mind that Pure functions don't cache their results, so it's easy to do a lot of duplicated work by misusing them in Blueprints.
+6.5. __AVOID__ using BlueprintPure for functions that do non-trivial amount of work. Keep in mind that Pure functions don't cache their results, so it's easy to do a lot of duplicated work by misusing them in Blueprints.
 
 ## 7. Variables
 
@@ -129,117 +87,81 @@ Within each of these groups, order members by logical groups when appropriate.
 7.2. __AVOID__ short or meaningless names (e.g. `A`, `Rbarr`, `Nughdeget`). Single character variable names are only okay for counters and temporaries, where the purpose of the variable is obvious. An exception to this rule are mathematical functions where the meaning of the parameters is "universally" known, such as `Lerp(float A, float B, float T)` or `Sin(float X)`.
 
 7.3. __AVOID__ using negative names for boolean variables.
-
+```
     // Right:
     if (bVisible)
 
     // Wrong: Double negation is hard to read.
     if (!bInvisible)
+```
+## 8. if statements decoration
 
-7.4. __DO__ declare each variable on a separate line so that a comment on the meaning of the variable can be provided.  Also, the JavaDoc style requires it.
-
-7.5. __DO__ use portable aliases for basic C++ types:
-
-* `bool` for boolean values (_never_ assume the size of `bool`). `BOOL` will not compile. 
-* `TCHAR` for a character (_never_ assume the size of `TCHAR`). 
-* `uint8` for unsigned bytes (1 byte). 
-* `int8` for signed bytes (1 byte). 
-* `uint16` for unsigned "shorts" (2 bytes). 
-* `int1` for signed "shorts" (2 bytes). 
-* `uint32` for unsigned ints (4 bytes). 
-* `int32` for signed ints (4 bytes). 
-* `uint64` for unsigned "quad words" (8 bytes). 
-* `int64` for signed "quad words" (8 bytes). 
-* `float` for single precision floating point (4 bytes). 
-* `double` for double precision floating point (8 bytes). 
-* `PTRINT` for an integer that may hold a pointer (_never_ assume the size of `PTRINT`). 
-
-7.6. __DO__ put a single space between the `*` or `&` and the variable name for pointers or references, and don't put a space between the type and `*` or `&`. For us, the fact that we are declaring a pointer or reference variable here much more belongs to the type of the variable than to its name:
-
-      AController* Instigator
-      const FDamageEvent& DamageEvent
-
-7.7. __DO__ test whether a pointer is valid before dereferencing it. `nullptr` should be used instead of the C-style `NULL` macro in all cases. If the pointer points to any `UOBJECT`, use `IsValid` to ensures the pointer is not null and the referenced object is not marked for destruction. 
-
-
-## 8. Enums & Constants
-
-8.1. __CONSIDER__ using `enum class` or `static constexpr` over `static const` variables over `#define` when defining constants.
-
-8.2. __DO__ use ALL_CAPS with underscores between words for constant names.
-
-## 9. Indentation & Whitespaces
-
-9.1. __DO NOT__ put multiple statements on one line.
-
-
-## 10. Line Breaks
-
-10.1 __DO__ separate function bodies with at least one newline.
-     // Right
-     int Foo()
-     {
-         // ...
-     }
-     
-     void Bar() {}
-     
-     // Wrong
-     int Foo()
-     {
-         // ...
-     }
-     void Bar() {}
-    
-Exception: when you group together multiple related class methods you should omit the newline:
-    
-    // Also right
-    class C
-    {
-        ...
-        
-        int GetHeight() const { return Height; }
-        int GetWidth() const { return Width; }
-    };
-
-## 11. Braces
-
-11.1. __DO__ use curly braces, even if the body of a conditional statement contains just one line:
-
-      // Right:
+8.1. __DO_NOT__ use curly braces if the body of a conditional statement contains just one line:
+```
+      // Wrong:
       if (bVisible)
       {
           Hide();
       }
 
-      // Wrong: Can lead to subtle bugs in the future, if the body is extended to span multiple statements.
-      if (bVisible)
+      // Right
+      if (bVisible) Hide();
+
+      // Right, if you have a long condition expression
+      if (bVisible && bWantsToHide && bCanAffordTo && bStartsAlligned && bIsFullMoon)
           Hide();
 
+      // Right, if the 'true' statement is long
+      if (bVisible)
+            Hide(GetCoverSubsystem::Get().FindMeANeatPlaceToHidePlease(GetActorLocation()));
+```
+8.2. __DO__ use curly braces for a single-lined true statement if 'false' block consists from more than 1 line:
+```
+      // Wrong:
+      if (bVisible)
+            Hide();
+      else
+      {
+            Unhide();
+            SurpriseYourEnemies();
+      }
 
-## 12. Parentheses
+      // Right:
+      if (bVisible)
+      {
+            Hide();
+      }
+      else
+      {
+            Unhide();
+            SurpriseYourEnemies();
+      }
 
-12.1. __DO__ use parentheses to group expressions:
+      // Right:
+      if (bVisible)
+      {
+            Unhide();
+            SurpriseYourEnemies();
+      }
+      else
+            Hide();
+ ```   
 
+## 9. Parentheses
+
+9.1. __DO__ use parentheses to group expressions:
+```
       // Right:
       if ((a && b) || c)
 
       // Wrong: Operator precedence is not immediately clear.
       if (a && b || c)
+```
 
-12.3. __DO NOT__ use spaces after parentheses:
+## 10. Control Flow
 
-      // Right:
-      if ((a && b) || c)
-
-      // Wrong:
-      if ( ( a && b ) || c )
-
-
-## 13. Control Flow
-
-13.1. __DO__ add a `break` (or `return`) statement at the end of every `case`, or use `[[fallthrough]]`
-
+10.1. __DO__ add a `break` (or `return`) statement at the end of every `case`, or use `[[fallthrough]]`
+```
       switch (MyEnumValue)
       {
         case Value1:
@@ -255,9 +177,9 @@ Exception: when you group together multiple related class methods you should omi
             DefaultHandling();
             break;
       }
-      
-13.1.1. __DO__ wrap switch cases in parentheses whenever you declare variables inside them
-
+```     
+10.1.1. __DO__ wrap switch cases in parentheses whenever you declare variables inside them
+```
       switch (MyVar)
       {
         case 42:
@@ -270,59 +192,25 @@ Exception: when you group together multiple related class methods you should omi
         default:
             break;
       }
-      
-13.1.2. __DO__ add a `default` case at the end of every switch. If empty, either do `default: /* newline */ break;` or `default:;`.
-
-13.2. __DO NOT__ put `else` after jump statements:
-
+```      
+10.2. __DO NOT__ put `else` after jump statements:
+```
       // Right:
-      if (ThisOrThat)
-      {
-          return;
-      }
-
+      if (ThisOrThat) return;
       SomethingElse();
-
 
       // Wrong: Causes unnecessary indentation of the whole else block.
       if (ThisOrThat)
-      {
           return;
-      }
       else
-      {
           SomethingElse();
-      }
+```
+## 11. General Style
 
-
-13.3. __DO NOT__ mix const and non-const iterators.
-
-      // Right:
-      for (Container::const_iterator it = c.cbegin(); it != c.cend(); ++it)
-
-      // Wrong: Crashes on some compilers.
-      for (Container::const_iterator it = c.begin(); it != c.end(); ++it)
-
-## 13 ½. General Style
-
-13 ½.1. __DO__ use the short form `if (Pointer)` over `if (Pointer != nullptr)`.
-
-13 ½.2. __DO__ use the short form `if (bBool)` and `if (!bBool)` over `if (bBool == true)` or `if (bBool == false)`.
-
-13 ½.3. __DO NOT__ use Yoda-style expressions:
-
-       // Good
-       if (MyHealth == 0) { ... }
-       if (MyHealth == SomeThing()) { ... }
-       
-       // Bad
-       if (0 == MyHealth) { ... }
-       if (SomeThing() == MyHealth) { ... }
-       
-13 ½.4. __AVOID__ too many indentation levels. If your function has a lot of indentation, you have 2 options:
+11.1. __AVOID__ too many indentation levels. If your function has a lot of indentation, you have 2 options:
 
 * if the high nesting is just due to error checking, consider replacing nesting with early returns/continues:
-
+```
         // Bad
         if (Actor) 
         {
@@ -339,30 +227,18 @@ Exception: when you group together multiple related class methods you should omi
         }
         
         // Good
-        if (!Actor)
-        {
-            return;
-        }
-        
-        if (!IsAvailable(Actor))
-        {
-            return;
-        }
+        if (!Actor || !IsAvailable(Actor)) return;
         
         for (AActor* OtherActor : Others)
         {
-            if (!IsAvailable(OtherActor))
-            {
-                continue;
-            }
+              if (!IsAvailable(OtherActor)) continue;
+              // ...
         }
-        
-* if the nesting instead derives from complex subroutines of your function, consider splitting it into multiple functions.
+```        
+## 12. Language Features
 
-## 14. Language Features
-
-14.1. __AVOID__ using the `auto` keyword except when required by the language (e.g. assigning lambdas) or when assigning long iterator types. If in doubt, for example if using `auto` could make the code less readable, do not use `auto`.
-
+12.1. __AVOID__ using the `auto` keyword except when required by the language (e.g. assigning lambdas) or when assigning long iterator types. If in doubt, for example if using `auto` could make the code less readable, do not use `auto`.
+```
       // Bad
       auto* HealthComponent = FindComponentByClass<USOCHealthComponent>();
       
@@ -370,35 +246,30 @@ Exception: when you group together multiple related class methods you should omi
       USOCHealthComponent* HealthComponent = FindComponentByClass<USOCHealthComponent>();
       
       TMap<UAVeryVeryLongTypeHere, FAnotherVeryLongTypeThere> Map;
-      for (auto it = Map.begin(); it != Map.end(); it++) { ... }
+      for (auto it = begin(Map); it != end(Map); ++it) { ... }
+```
+12.2. __DO__ use `auto*` for auto pointers, to be consistent with references, and to add additional guidance for the reader. Remember that `const auto*` and `const auto` mean different things when the type resolves to a pointer (and you usually want `const auto*`).
 
-14.2. __DO__ use `auto*` for auto pointers, to be consistent with references, and to add additional guidance for the reader. Remember that `const auto*` and `const auto` mean different things when the type resolves to a pointer (and you usually want `const auto*`).
+12.3. __DO__ use proprietary types, such as `TArray` or `TMap` where possible. This avoids unnecessary and repeated type conversion while interacting with the Unreal Engine APIs.
 
-14.3. __DO__ use proprietary types, such as `TArray` or `TMap` where possible. This avoids unnecessary and repeated type conversion while interacting with the Unreal Engine APIs.
+12.4. __DO__ use native C++ wide string literals L"Like this one" instead of wrapped with TEXT() macros literals
 
-14.4. __DO__ use the `TEXT()` macro around string literals. Without it, code which constructs `FString`s from literals will cause an undesirable string conversion process. 
+## 13 Casting
 
-14.5. __CONSIDER__ using file-local helper functions where it makes sense. In that case, declare them inside an anonymous namespace to indicate that they're private to that cpp file.
+13.1. __DO__ use CastChecked<> instead of static_cast or Cast<> when casting to a type that is guaranteed to be correct. (i.e. if you don't need to check whether the object is really of that type AND the object is guaranteed not to be null).
 
-14.6. __DO__ use `[[maybe_unused]]` for functions and variables that are only used in conditionally-compiled code (e.g. some that are only used inside `check` macros).
+13.2. __DO NOT__ use `dynamic_cast` ever. Use `Cast` instead.
 
-## 15 Casting
+13.3. __DO__ use C-style cast instead of static_cast when cast to a class not derived from UObject.
 
-15.1. __DO__ use C++-style casts (`static_cast`, `const_cast`, `reinterpret_cast`) over C-style casts.
+## 14. Events & Delegates
 
-15.2. __DO NOT__ use `dynamic_cast` ever. Use `Cast` instead.
+14.1. __DO__ define two functions when exposing an event to a subclass. The first function should be virtual and its name should begin with `Notify`. The second function should be a `BlueprintImplementableEvent UFUNCTION` and its name should begin with `Receive`. The default implementation of the virtual function should be to call the `BlueprintImplementableEvent` function (see `AActor::NotifyActorBeginOverlap` and `AActor::ReceiveActorBeginOverlap` for example).
 
-15.3. __CONSIDER__ using `CastChecked` over `Cast` when casting to a type that is guaranteed to be correct (i.e. if you don't need to check whether the object is really of that type AND the object is guaranteed not to be null).
-
-
-## 16. Events & Delegates
-
-16.1. __DO__ define two functions when exposing an event to a subclass. The first function should be virtual and its name should begin with `Notify`. The second function should be a `BlueprintImplementableEvent UFUNCTION` and its name should begin with `Receive`. The default implementation of the virtual function should be to call the `BlueprintImplementableEvent` function (see `AActor::NotifyActorBeginOverlap` and `AActor::ReceiveActorBeginOverlap` for example).
-
-16.2. __DO__ call the virtual function before broadcasting the event, if both are defined (see `UPrimitiveComponent::BeginComponentOverlap` for example).
+14.2. __DO__ call the virtual function before broadcasting the event, if both are defined (see `UPrimitiveComponent::BeginComponentOverlap` for example).
 
 Example:
-
+```
     DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FHoatActorGraphConnectivityChangedSignature, AActor*, Source, AActor*, Target, float, Distance);
 
     /** Event when the connectivity of an observed source vertex has changed. */
@@ -421,16 +292,75 @@ Example:
         SOC_LOG(hoat, Log, TEXT("%s changed the connectivity of vertex %s: Distance to target %s changed to %f."),
                 *GetName(), *Source->GetName(), *Target->GetName(), Distance);
     }
+```
+## 15. Comments
 
-## 17. Comments
+15.1. __DO__ add a space after `//`.
 
-17.1. __DO__ add a space after `//`.
+15.2. __DO__ place the comment on a separate line, not at the end of a line of code.
 
-17.2. __DO__ place the comment on a separate line, not at the end of a line of code.
+15.3. __DO__ write API documentation with [Javadoc comments](https://docs.unrealengine.com/latest/INT/Programming/Development/CodingStandard/index.html#exampleformatting).
 
-17.3. __DO__ write API documentation with [Javadoc comments](https://docs.unrealengine.com/latest/INT/Programming/Development/CodingStandard/index.html#exampleformatting).
+## 16. Invalid state handling
 
+16.1. We __DO NOT__ check a pointer for null because it’s a pointer and it would be nice to check it for null and return from function just in case.
+Every validation of a function parameters or a function return value must be rationalised by the following policy.
 
-## 18. Additional Naming Conventions
+Every function is implied to have a range of valid parameters it accepts and values it returns.
+Execution of a function with invalid parameters means the program has entered invalid state.
+A function returning an unexpected value means the program has entered invalid state.
+There are two major reasons why programs can enter invalid state: code logic error and invalid input data.
+In general, we __DO NOT__ maintain invalid states. It breeds a lot of code unrelated to game logic and in the end we don’t want our game to continue running if it entered an invalid state. It can severely break gameplay experience or even corrupt save data. If the game has entered an invalid state the further execution must be terminated. However, there are exceptions.
+Crash recovery in the Editor during development consumes a lot of time. Therefore we __DO__ maintain invalid states caused by invalid input data in all non-shipping builds. Maintaining invalid state means the session execution must continue and crash should be avoided. The program is still considered being in an invalid state, thus in case of PIE the session should be stopped as soon as possible and the invalid state should be maintained until the PIE session is safely terminated. Maintenance beyond the PIE session safe termination point is not required.
+If data is validated before session start, the data is considered always valid and thus the code that works with the data should not maintain invalid input data state. One way to perform data validation is UObject::IsDataValid implementation. If such data validation is present the data is considered to be completely valid. In each particular case we either implement data validation OR invalid state maintenance, not both at the same time.
+In the perfect world we don’t want to have partial data validation or partial invalid state maintenance, but in reality full data validation and complete invalid state maintenance is tedious and in most cases is just overkill. Thus, the exact degree of maintenance and validation in each particular case is a state of art and defined by the implementer.
 
-18.1 (for SOCS2): prefix all game-specific C++ public types with `SOC`.
+16.2. How do we implement the policy:
+The native Unreal Engine tools do not deliver a convenient way to implement the policy, thus we implement our own:
+
+```
+UOutData* Func(UInputData* InputData)
+{
+If (!Assert(InputData)) return nullptr;
+	…
+}
+
+UOutData* Func(UInputData* InputData)
+{
+	TArray<int> Values = InputData->GetValues();
+      if (!Assert(Values.Num() >= 3, "Optional message. Values Num = %d", Values.Num())) return nullptr;
+      …
+}
+```
+The code has the following behaviour:
+- If the assertion expression is evaluated to false in a non-shipping build:
+      * If a debugger is present, “debug break” will be triggered.
+      * A log entry will be generated in the LogOutputDevice category.
+      * If it’s a PIE session, a PIE error entry will be generated that will be shown in the end the PIE session.
+      * A message dialog will be shown with the error message, asking whether to interrupt the session or continue.
+      * If asked to interrupt the session, an interruption request will be posted. The PIE session keeps going until it can safly interrupt the session.
+      * The same Assert can fail again only after 1 second after the dialog choice from the previous failure. (Failure spam protection)
+- In the shipping build the assertion expression is not evaluated. It’s always considered true.
+
+Difference with Unreal’s ensure:
+- ensure evaluates the expression in all builds
+- ensure does not generate PIE session error
+- ensure has no message dialogs or any form of signals, except a log entry. It’s very easy to miss or ignore
+- ensure doesn’t interrupt the execution session
+
+When branching code with Assert, we __DO__ prefer ‘true’ route for invalid state maintenance:
+```
+void Func(UInputData* InputData)
+{
+	…
+	UObject* ObjA = InputData->GetObjectA();
+If (!Assert(ObjA)) return nullptr;  // Preferred
+	…
+	UObject* ObjB = InputData->GetObjectB();
+	If (Assert(ObjB))  // Ineligible
+{
+…
+}
+}
+```
+
