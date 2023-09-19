@@ -376,7 +376,7 @@ Exception: when you group together multiple related class methods you should omi
 
 14.3. __DO__ use proprietary types, such as `TArray` or `TMap` where possible. This avoids unnecessary and repeated type conversion while interacting with the Unreal Engine APIs.
 
-14.4. __DO__ use the `TEXT()` macro around string literals. Without it, code which constructs `FString`s from literals will cause an undesirable string conversion process. 
+14.4. __DO NOT__ use the `TEXT()` macro around string literals. Instead, __DO__ use `L""`, which accomplishes the same. Without it, code which constructs `FString`s from literals will cause an undesirable string conversion process. 
 
 14.5. __CONSIDER__ using file-local helper functions where it makes sense. In that case, declare them inside an anonymous namespace to indicate that they're private to that cpp file.
 
